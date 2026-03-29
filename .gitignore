@@ -1,0 +1,6 @@
+node_modules/
+.env
+portfolio-sync.config.json
+*.tar.gz
+public/
+.DS_Store

@@ -1,0 +1,55 @@
+name: 📸 Update Portfolio Screenshots
+
+on:
+  # S'exécute automatiquement tous les lundis à 2h du matin
+  schedule:
+    - cron: '0 2 * * 1'
+  
+  # Permet de déclencher manuellement depuis l'interface GitHub
+  workflow_dispatch:
+  
+  # S'exécute quand on pousse sur la branche main (optionnel)
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'portfolio-sync.config.json'
+
+jobs:
+  update-screenshots:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 📸 Capture screenshots
+        run: npx portfolio-sync capture
+      
+      - name: 📊 Check for changes
+        id: git-check
+        run: |
+          git diff --exit-code public/images || echo "changes=true" >> $GITHUB_OUTPUT
+      
+      - name: 💾 Commit and push changes
+        if: steps.git-check.outputs.changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add public/images
+          git commit -m "🤖 chore: update portfolio screenshots [skip ci]"
+          git push
+      
+      - name: ✅ No changes detected
+        if: steps.git-check.outputs.changes != 'true'
+        run: echo "No screenshot changes detected"

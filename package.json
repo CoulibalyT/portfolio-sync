@@ -1,0 +1,44 @@
+{
+  "name": "portfolio-sync",
+  "version": "1.0.0",
+  "description": "Automatically capture and sync screenshots of your live projects to your portfolio",
+  "main": "src/index.js",
+  "bin": {
+    "portfolio-sync": "./bin/cli.js"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": [
+    "portfolio",
+    "screenshot",
+    "automation",
+    "puppeteer",
+    "sync",
+    "capture",
+    "webp"
+  ],
+  "author": "Tene Coulibaly",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TONUSERNAME/portfolio-sync"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "dotenv": "^16.6.1",
+    "ora": "^5.4.1",
+    "puppeteer": "^24.34.0",
+    "sharp": "^0.33.5"
+  }
+}

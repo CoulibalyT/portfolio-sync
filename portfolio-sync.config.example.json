@@ -1,0 +1,20 @@
+{
+  "projects": [
+    {
+      "name": "my-project",
+      "url": "https://my-project.vercel.app",
+      "pages": [
+        { "path": "/", "name": "home" },
+        { "path": "/about", "name": "about" }
+      ],
+      "viewport": { "width": 1440, "height": 900 },
+      "outputDir": "./public/images/my-project"
+    }
+  ],
+  "options": {
+    "quality": 90,
+    "format": "webp",
+    "waitFor": 2000,
+    "fullPage": false
+  }
+}
