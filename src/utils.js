@@ -41,9 +41,39 @@ async function hasFileChanged(filePath, newBuffer) {
   return existingHash !== newHash;
 }
 
+/**
+ * Sauvegarde l'état de la page (screenshot, DOM, URL, erreur) pour diagnostic.
+ * Appelé quand une capture échoue en mode --debug.
+ */
+async function dumpDebugArtifacts(page, debugDir, name, error) {
+  await ensureDir(debugDir);
+  const base = path.join(debugDir, name);
+
+  try {
+    const screenshot = await page.screenshot({ fullPage: false, type: 'png' });
+    await fs.writeFile(`${base}.png`, screenshot);
+  } catch (_) { /* best-effort */ }
+
+  try {
+    const html = await page.content();
+    await fs.writeFile(`${base}.html`, html);
+  } catch (_) { /* best-effort */ }
+
+  const log = [
+    `Time: ${new Date().toISOString()}`,
+    `URL: ${page.url()}`,
+    `Error: ${error && error.message ? error.message : String(error)}`,
+    error && error.stack ? `Stack:\n${error.stack}` : ''
+  ].filter(Boolean).join('\n');
+  await fs.writeFile(`${base}.log`, log);
+
+  return base;
+}
+
 module.exports = {
   ensureDir,
   saveScreenshot,
   fileExists,
-  hasFileChanged
+  hasFileChanged,
+  dumpDebugArtifacts
 };

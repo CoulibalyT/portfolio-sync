@@ -5,8 +5,6 @@ require('dotenv').config();
 
 const { Command } = require('commander');
 const chalk = require('chalk');
-const { captureProjects } = require('../src/capturer');
-const { loadConfig } = require('../src/config');
 const packageJson = require('../package.json');
 
 const program = new Command();
@@ -22,12 +20,20 @@ program
   .option('-c, --config <path>', 'Path to config file', 'portfolio-sync.config.json')
   .option('-p, --project <name>', 'Capture only specific project')
   .option('-d, --dry-run', 'Show what would be captured without actually doing it')
+  .option('--debug', 'On failure, save DOM, screenshot, and URL to ./debug/')
+  .option('--debug-dir <path>', 'Directory for --debug artifacts', './debug')
   .action(async (options) => {
+    // Lazy-require so `--help` ne charge pas puppeteer/sharp inutilement
+    const { captureProjects } = require('../src/capturer');
+    const { loadConfig } = require('../src/config');
     try {
       console.log(chalk.blue.bold('\n📸 Portfolio Sync - Starting capture...\n'));
 
       const config = await loadConfig(options.config);
-      await captureProjects(config, options.project, options.dryRun);
+      await captureProjects(config, options.project, options.dryRun, {
+        debug: Boolean(options.debug),
+        debugDir: options.debugDir
+      });
 
       if (!options.dryRun) {
         console.log(chalk.green.bold('\n✅ All screenshots captured successfully!\n'));
@@ -84,6 +90,7 @@ program
   .description('List all configured projects and their pages')
   .option('-c, --config <path>', 'Path to config file', 'portfolio-sync.config.json')
   .action(async (options) => {
+    const { loadConfig } = require('../src/config');
     try {
       const config = await loadConfig(options.config);
 

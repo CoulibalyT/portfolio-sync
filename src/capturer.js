@@ -4,10 +4,13 @@ const chalk = require('chalk');
 const { validateProject } = require('./config');
 const { optimizeImage } = require('./optimizer');
 const path = require('path');
-const { ensureDir, saveScreenshot, hasFileChanged } = require('./utils');
+const { ensureDir, saveScreenshot, hasFileChanged, dumpDebugArtifacts } = require('./utils');
 const { authenticate, isAuthenticated } = require('./auth');
 
-async function captureProjects(config, projectFilter = null, dryRun = false) {
+const DEFAULT_DEBUG_DIR = './debug';
+
+async function captureProjects(config, projectFilter = null, dryRun = false, captureOptions = {}) {
+  const { debug = false, debugDir = DEFAULT_DEBUG_DIR } = captureOptions;
   let projects = config.projects;
 
   // Filtrer par projet si spécifié
@@ -49,7 +52,7 @@ async function captureProjects(config, projectFilter = null, dryRun = false) {
 
   try {
     for (const project of projects) {
-      await captureProject(browser, project, config.options, summary);
+      await captureProject(browser, project, config.options, summary, { debug, debugDir });
     }
   } finally {
     await browser.close();
@@ -59,7 +62,8 @@ async function captureProjects(config, projectFilter = null, dryRun = false) {
   console.log(chalk.bold(`\n📊 Summary: ${summary.updated} updated, ${summary.unchanged} unchanged, ${summary.failed} failed`));
 }
 
-async function captureProject(browser, project, options, summary) {
+async function captureProject(browser, project, options, summary, captureOptions = {}) {
+  const { debug = false, debugDir = DEFAULT_DEBUG_DIR } = captureOptions;
   validateProject(project);
 
   console.log(chalk.blue.bold(`\n📦 Processing project: ${project.name}`));
@@ -80,6 +84,10 @@ async function captureProject(browser, project, options, summary) {
       await authenticate(page, project.auth, project.url);
     } catch (error) {
       console.error(chalk.red(`   ✗ Authentication failed: ${error.message}`));
+      if (debug) {
+        const base = await dumpDebugArtifacts(page, debugDir, `${project.name}-auth`, error);
+        console.error(chalk.gray(`     debug artifacts: ${base}.{png,html,log}`));
+      }
       await page.close();
       throw error;
     }
@@ -96,7 +104,7 @@ async function captureProject(browser, project, options, summary) {
       }
     }
 
-    const result = await capturePage(page, project, pageConfig, options);
+    const result = await capturePage(page, project, pageConfig, options, { debug, debugDir });
     if (summary && result) {
       summary[result]++;
     }
@@ -105,13 +113,15 @@ async function captureProject(browser, project, options, summary) {
   await page.close();
 }
 
-async function capturePage(page, project, pageConfig, options) {
+async function capturePage(page, project, pageConfig, options, captureOptions = {}) {
+  const { debug = false, debugDir = DEFAULT_DEBUG_DIR } = captureOptions;
   const url = `${project.url}${pageConfig.path}`;
   const pageName = pageConfig.name || pageConfig.path.replace(/\//g, '_') || 'index';
   const maxRetries = options.retries || 3;
 
   const spinner = ora(`Capturing ${pageName}...`).start();
 
+  let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       // Naviguer vers la page
@@ -135,6 +145,19 @@ async function capturePage(page, project, pageConfig, options) {
           // Re-naviguer vers la page cible après re-auth
           await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
           await new Promise(resolve => setTimeout(resolve, options.waitFor || 2000));
+        }
+      }
+
+      // Vérifier que l'URL finale matche le pattern attendu — attrape les redirects
+      // silencieux vers signin (route guards qui rendent le login sans changer l'URL
+      // ne sont pas détectés ici, mais expectedUrlPattern sur une route protégée
+      // signalera une URL imprévue).
+      if (pageConfig.expectedUrlPattern) {
+        const actualUrl = page.url();
+        if (!new RegExp(pageConfig.expectedUrlPattern).test(actualUrl)) {
+          throw new Error(
+            `URL mismatch: expected /${pageConfig.expectedUrlPattern}/, got "${actualUrl}"`
+          );
         }
       }
 
@@ -166,11 +189,20 @@ async function capturePage(page, project, pageConfig, options) {
         return 'unchanged';
       }
     } catch (error) {
+      lastError = error;
       if (attempt < maxRetries) {
         spinner.warn(chalk.yellow(`${pageName} - attempt ${attempt}/${maxRetries} failed, retrying...`));
         await new Promise(resolve => setTimeout(resolve, 2000));
       } else {
         spinner.fail(chalk.red(`Failed to capture ${pageName} after ${maxRetries} attempts: ${error.message}`));
+        if (debug) {
+          try {
+            const base = await dumpDebugArtifacts(page, debugDir, `${project.name}-${pageName}`, lastError);
+            console.error(chalk.gray(`     debug artifacts: ${base}.{png,html,log}`));
+          } catch (dumpErr) {
+            console.error(chalk.gray(`     (debug dump failed: ${dumpErr.message})`));
+          }
+        }
         return 'failed';
       }
     }

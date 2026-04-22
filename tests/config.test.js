@@ -84,4 +84,28 @@ describe('validateConfig', () => {
     config.projects[0].auth = { type: 'form' };
     assert.doesNotThrow(() => validateConfig(config));
   });
+
+  it('should accept a valid expectedUrlPattern', () => {
+    const config = validConfig();
+    config.projects[0].pages[0].expectedUrlPattern = '/dashboard$';
+    assert.doesNotThrow(() => validateConfig(config));
+  });
+
+  it('should throw on non-string expectedUrlPattern', () => {
+    const config = validConfig();
+    config.projects[0].pages[0].expectedUrlPattern = 42;
+    assert.throws(
+      () => validateConfig(config),
+      { message: /'expectedUrlPattern' must be a string/ }
+    );
+  });
+
+  it('should throw on invalid expectedUrlPattern regex', () => {
+    const config = validConfig();
+    config.projects[0].pages[0].expectedUrlPattern = '[unclosed';
+    assert.throws(
+      () => validateConfig(config),
+      { message: /invalid 'expectedUrlPattern' regex/ }
+    );
+  });
 });

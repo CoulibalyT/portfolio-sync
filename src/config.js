@@ -59,6 +59,16 @@ function validateConfig(config) {
       if (!page.name) {
         throw new Error(`Project '${name}': each page must have a 'name' field`);
       }
+      if (page.expectedUrlPattern !== undefined) {
+        if (typeof page.expectedUrlPattern !== 'string') {
+          throw new Error(`Project '${name}', page '${page.name}': 'expectedUrlPattern' must be a string`);
+        }
+        try {
+          new RegExp(page.expectedUrlPattern);
+        } catch (e) {
+          throw new Error(`Project '${name}', page '${page.name}': invalid 'expectedUrlPattern' regex: ${e.message}`);
+        }
+      }
     }
 
     if (project.auth && project.auth.type) {

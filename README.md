@@ -60,6 +60,15 @@ Edit `portfolio-sync.config.json` (see `portfolio-sync.config.example.json`):
 | `outputDir` | string | Yes | Where to save screenshots |
 | `auth` | object | No | Authentication config (see below) |
 
+### Page options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `path` | string | Yes | Path appended to project `url` |
+| `name` | string | Yes | Screenshot filename (without extension) |
+| `fullPage` | boolean | No | Override global `fullPage` for this page |
+| `expectedUrlPattern` | string (regex) | No | After navigation, fail the capture if `page.url()` doesn't match. Useful to catch silent redirects to a signin page. Example: `"/dashboard$"` |
+
 ### Global options
 
 | Option | Type | Default | Description |
@@ -105,6 +114,36 @@ APP_PASSWORD=yourpassword
 
 **Supported auth types:** `form`, `basic`, `bearer`, `cookie`, `custom`
 
+### Custom auth with an external script file
+
+Inline `script` strings work but are painful to maintain (JSON escaping, no linting). Use `scriptFile` to point at a real JS module:
+
+```json
+{
+  "auth": {
+    "type": "custom",
+    "navigateTo": "/auth/signin",
+    "scriptFile": "./scripts/auth/my-app.js",
+    "waitForSelector": "nav[data-app-ready]"
+  }
+}
+```
+
+The module must export a function `(page, context) => Promise<void>`:
+
+```js
+// scripts/auth/my-app.js
+module.exports = async function(page, { projectUrl, env }) {
+  await page.waitForSelector('#password-input');
+  await page.type('#password-input', env.MY_APP_PASSWORD);
+  await page.click('button[type="submit"]');
+};
+```
+
+`context.env` is `process.env`, so credentials live in `.env` — no need for `${VAR}` placeholders. Inline `script` also supports `${VAR}` substitution now (v1.1+).
+
+`waitForSelector` on custom auth waits for a real DOM signal instead of a blind `waitFor` delay.
+
 ## CLI Commands
 
 ```bash
@@ -131,13 +170,17 @@ npx portfolio-sync init
 | `-c, --config <path>` | Config file path (default: `portfolio-sync.config.json`) |
 | `-p, --project <name>` | Capture only this project |
 | `-d, --dry-run` | Show what would be captured without doing it |
+| `--debug` | On failure, save the page screenshot, DOM, URL and error to `./debug/` |
+| `--debug-dir <path>` | Directory for `--debug` artifacts (default: `./debug`) |
 
 ## Features
 
 - **Retry on failure** — auto-retries failed captures (configurable)
 - **Hash comparison** — skips unchanged screenshots to avoid useless commits
 - **Image optimization** — resize + compress via Sharp (webp, jpeg, png, avif)
-- **Auth support** — login to protected pages before capturing
+- **Auth support** — login to protected pages before capturing (`form`, `basic`, `bearer`, `cookie`, `custom` — the last one via inline `script` or an external `scriptFile`)
+- **URL assertions** — per-page `expectedUrlPattern` catches silent redirects to signin pages instead of saving a useless screenshot
+- **Debug artifacts** — `--debug` dumps screenshot, DOM and URL to `./debug/` on failure so you can see what the browser saw
 - **Dry-run mode** — preview captures without launching the browser
 
 ## GitHub Actions

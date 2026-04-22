@@ -1,3 +1,4 @@
+const path = require('path');
 const chalk = require('chalk');
 
 /**
@@ -147,10 +148,10 @@ async function authenticateWithCookie(page, authConfig) {
  * Authentification personnalisée avec fonction JavaScript
  */
 async function authenticateWithCustom(page, authConfig, projectUrl) {
-  const { script } = authConfig;
+  const { script, scriptFile } = authConfig;
 
-  if (!script) {
-    throw new Error('Script is required for custom authentication');
+  if (!script && !scriptFile) {
+    throw new Error('Either "script" or "scriptFile" is required for custom authentication');
   }
 
   // Naviguer vers la page si nécessaire
@@ -158,17 +159,41 @@ async function authenticateWithCustom(page, authConfig, projectUrl) {
     const navigateUrl = authConfig.navigateTo.startsWith('http')
       ? authConfig.navigateTo
       : `${projectUrl}${authConfig.navigateTo}`;
-    
+
     await page.goto(navigateUrl, { waitUntil: 'networkidle2' });
   }
 
-  // Exécuter le script personnalisé
-  // AVERTISSEMENT : ce script est exécuté directement dans le navigateur.
-  // Ne jamais utiliser une config provenant d'une source non fiable.
-  await page.evaluate(script);
+  if (scriptFile) {
+    // Charger un module JS externe exportant une fonction (page, context) => Promise<void>.
+    // Permet un script lintable/testable avec accès direct à process.env.
+    const absPath = path.resolve(process.cwd(), scriptFile);
+    let mod;
+    try {
+      mod = require(absPath);
+    } catch (err) {
+      if (err && err.code === 'ERR_REQUIRE_ESM') {
+        mod = await import(absPath);
+      } else {
+        throw err;
+      }
+    }
+    const handler = typeof mod === 'function' ? mod : (mod && mod.default);
+    if (typeof handler !== 'function') {
+      throw new Error(`scriptFile at ${scriptFile} must export a function(page, context)`);
+    }
+    await handler(page, { projectUrl, env: process.env });
+  } else {
+    // Résoudre les variables d'environnement inline (${VAR}) avant exécution.
+    // AVERTISSEMENT : ce script est exécuté directement dans le navigateur.
+    // Ne jamais utiliser une config provenant d'une source non fiable.
+    const resolvedScript = resolveEnvVarsInString(script);
+    await page.evaluate(resolvedScript);
+  }
 
-  // Attendre si nécessaire
-  if (authConfig.waitFor) {
+  // Attendre un sélecteur (plus fiable) ou à défaut un délai
+  if (authConfig.waitForSelector) {
+    await page.waitForSelector(authConfig.waitForSelector, { timeout: 15000 });
+  } else if (authConfig.waitFor) {
     await new Promise(resolve => setTimeout(resolve, authConfig.waitFor));
   }
 }
@@ -206,6 +231,25 @@ function resolveEnvVar(value) {
 }
 
 /**
+ * Résoudre les variables d'environnement inline dans une chaîne multi-variable.
+ * Contrairement à resolveEnvVar (qui n'accepte qu'une valeur ${VAR} seule),
+ * cette fonction remplace toutes les occurrences de ${VAR} dans une chaîne —
+ * utilisé pour les scripts custom où plusieurs variables peuvent apparaître.
+ */
+function resolveEnvVarsInString(str) {
+  if (typeof str !== 'string') {
+    return str;
+  }
+  return str.replace(/\$\{([A-Z_][A-Z0-9_]*)\}/g, (_, varName) => {
+    const value = process.env[varName];
+    if (value === undefined) {
+      throw new Error(`Environment variable ${varName} is not defined`);
+    }
+    return value;
+  });
+}
+
+/**
  * Vérifier si l'utilisateur est toujours authentifié
  */
 async function isAuthenticated(page, authConfig) {
@@ -224,5 +268,6 @@ async function isAuthenticated(page, authConfig) {
 module.exports = {
   authenticate,
   isAuthenticated,
-  resolveEnvVar
+  resolveEnvVar,
+  resolveEnvVarsInString
 };

@@ -1,6 +1,6 @@
 {
   "name": "portfolio-sync",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Automatically capture and sync screenshots of your live projects to your portfolio",
   "main": "src/index.js",
   "bin": {
@@ -22,7 +22,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TONUSERNAME/portfolio-sync"
+    "url": "https://github.com/CoulibalyT/portfolio-sync"
   },
   "files": [
     "src/",
